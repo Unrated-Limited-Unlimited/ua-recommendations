@@ -10,7 +10,7 @@ port, database = port_database.split("/")
 
 
 user = "ulu_backend"
-password = "your_password"
+password = "${DB_PASSWORD:}" #Use environment variable or similar to insert the actuall passwoord
 
 
 try:
@@ -26,21 +26,16 @@ except psycopg2.OperationalError as e:
     # Handle the error or exit
 
 try:
-    # Cursor to execute queries
     cursor = connection.cursor()
 
-    # Your SQL query
-    query = "SELECT UserID, WhiskeyID, Rating FROM Ratings"
+    query = "SELECT user, whiskey, rating FROM Rating"
 
-    # Execute the query
     cursor.execute(query)
-
-    # Fetch the results
     rows = cursor.fetchall()
 
-    # Optional: Convert to DataFrame
-    df = pd.DataFrame(rows, columns=['UserID', 'WhiskeyID', 'Rating'])
-    print(df.head())  # Just printing the first few rows as an example
+    # Convert to DataFrame
+    df = pd.DataFrame(rows, columns=['user', 'whiskey', 'rating'])
+    print(df.head())  # Just printing the first few rows
 
 except psycopg2.Error as e:
     print(f"Error executing query: {e}")
