@@ -1,3 +1,4 @@
+import os
 import psycopg2
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
@@ -42,7 +43,7 @@ def get_data_from_database():
         port, database = port_database.split("/")
 
         user = "ulu_backend"
-        password = "${DB_PASSWORD:}"  # Use environment variable or similar to insert the actuall password
+        password = os.environ.get("DB_PASSWORD")
 
         connection = psycopg2.connect(
             user=user,
@@ -120,4 +121,5 @@ def main():
                         conn.sendall(json.dumps(recommendations).encode('utf-8'))
 
 
-main()
+if __name__ == "__main__":
+    main()
