@@ -4,7 +4,9 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import socket
 import json
+from flask import Flask, request, jsonify
 
+app = Flask(__name__)
 
 # ----------------------------------------------------------- #
 def get_recommendations(user_id, user_similarity_df, user_item_matrix, top_n=10):
@@ -34,7 +36,9 @@ def get_recommendations(user_id, user_similarity_df, user_item_matrix, top_n=10)
 
 
 def get_data_from_database():
+    connection = None
     try:
+        print("Attempting Database Connection...")
         url = "jdbc:postgresql://localhost:5432/ulu_prod"
         # Remove the prefix
         pgsql_url = url.replace("jdbc:postgresql://", "")
@@ -55,6 +59,8 @@ def get_data_from_database():
 
         cursor = connection.cursor()
 
+        print("Connected to Database, retrieving Ratings")
+
         query = "SELECT user, whiskey, rating FROM Rating"
 
         cursor.execute(query)
@@ -63,7 +69,7 @@ def get_data_from_database():
         # Convert to DataFrame
         df = pd.DataFrame(rows, columns=['user', 'whiskey', 'rating'])
         print(df.head())  # Just printing the first few rows
-
+        print("Ratings retrieved, Dataframe created.")
         return df
 
     except psycopg2.OperationalError as e:
@@ -81,6 +87,17 @@ def get_data_from_database():
             connection.close()
             print("PostgreSQL connection is closed")
 # ----------------------------------------------------------- #
+
+df = get_data_from_database()
+if df is None:
+    print("Data retrieval failed.")
+else:
+    print("Starting machine learning sequence")
+    # Convert the ratings DataFrame into a user-item matrix
+    user_item_matrix = df.pivot(index='user', columns='whiskey', values='rating').fillna(0)
+    user_similarity = cosine_similarity(user_item_matrix)
+    user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
+    print("sequence complete... entering server mode")
 
 
 def main():
@@ -122,4 +139,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    app.run(debug=False)
