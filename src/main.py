@@ -99,44 +99,31 @@ else:
     user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
     print("sequence complete... entering server mode")
 
+@app.route('/process', methods=['POST'])
+def process_request():
+    # Extract the integer from the request. Assuming it's sent as JSON for this example
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
 
-def main():
-    df = get_data_from_database()
+    data = request.get_json()
+    if 'number' not in data:
+        return jsonify({"error": "No number provided"}), 400
 
-    if df is None:
-        print("Data retrieval failed.")
+    number = data['number']
+
+    # Example processing based on the received number
+    if number == 1:
+        response_data = {"message": "You sent one!"}
+    elif number == 2:
+        response_data = {"message": "Number two, coming right up!"}
     else:
-        print("Starting machine learning sequence")
-        # Convert the ratings DataFrame into a user-item matrix
-        user_item_matrix = df.pivot(index='user', columns='whiskey', values='rating').fillna(0)
-        user_similarity = cosine_similarity(user_item_matrix)
-        user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
-        print("sequence complete... entering server mode")
-        host = 'localhost'
-        port = 65432
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((host, port))
-            s.listen()
-            print(f"Server listening on {host}:{port}")
+        response_data = {"message": f"Received {number}, but I'm not sure what to do with it."}
 
-            while True:
-                conn, addr = s.accept()
-                with conn:
-                    print(f"Connected by {addr}")
-                    while True:
-                        data = conn.recv(1024)
-                        if not data:
-                            break
-                        # Assuming data is sent as a JSON string with 'user_id'
-                        request_data = json.loads(data.decode('utf-8'))
-                        user_id = request_data['user_id']
-                        # top_n = request_data.get('top_n', 5)
-
-                        recommendations = get_recommendations(user_id, user_similarity_df, user_item_matrix)
-
-                        # Send back the recommendations as a JSON string
-                        conn.sendall(json.dumps(recommendations).encode('utf-8'))
+    return jsonify(response_data)
 
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    if df is not None:
+        app.run(debug=False)
+    else:
+        print("Data retrival failed, exiting application")
