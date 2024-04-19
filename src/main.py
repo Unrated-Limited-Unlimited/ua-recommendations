@@ -2,9 +2,10 @@ import os
 import psycopg2
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
-import socket
-import json
 from flask import Flask, request, jsonify
+from fastai.tabular.all import *
+from fastai.collab import *
+
 
 app = Flask(__name__)
 
@@ -86,6 +87,15 @@ def get_data_from_database():
             cursor.close()
             connection.close()
             print("PostgreSQL connection is closed")
+
+
+
+#Separation, scikit vs fastai
+
+def getMochData (): #Uses moch data from the Movielens 100k dataset
+    ratings = pd.read_csv('assets/ml-100k/u.data', delimiter='\t', header=None, usecols=(0,1,2), names=['user','whiskey','rating'])
+    print(ratings.head())
+
 # ----------------------------------------------------------- #
 
 df = get_data_from_database()
@@ -99,13 +109,18 @@ else:
     user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
     print("sequence complete... entering server mode")
 
+getMochData()
+
 @app.route('/process', methods=['POST'])
 def process_request():
     # Extract the integer from the request. Assuming it's sent as JSON for this example
+    print(request)
+
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
 
     data = request.get_json()
+    print(data)
     if 'number' not in data:
         return jsonify({"error": "No number provided"}), 400
 
@@ -123,7 +138,7 @@ def process_request():
 
 
 if __name__ == "__main__":
-    if df is not None:
+    if df is None:
         app.run(debug=False)
     else:
         print("Data retrival failed, exiting application")
