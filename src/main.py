@@ -92,9 +92,15 @@ def get_data_from_database():
 
 #Separation, scikit vs fastai
 
-def getMochData (): #Uses moch data from the Movielens 100k dataset
+def getMockData (): #Uses mock data from the Movielens 100k dataset
     ratings = pd.read_csv('assets/ml-100k/u.data', delimiter='\t', header=None, usecols=(0,1,2), names=['user','whiskey','rating'])
-    print(ratings.head())
+
+    dls = CollabDataLoaders.from_df(ratings, bs=64)
+    print("Mock Data Loaded")
+    learn = collab_learner(dls, n_factors=50, y_range=(0, 5.5))
+    learn.fit_one_cycle(5, 5e-3, wd=0.1)
+    print("Learned Model")
+
 
 # ----------------------------------------------------------- #
 
@@ -109,7 +115,7 @@ else:
     user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
     print("sequence complete... entering server mode")
 
-getMochData()
+getMockData()
 
 @app.route('/process', methods=['POST'])
 def process_request():
