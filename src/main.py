@@ -1,7 +1,5 @@
-import os
 import psycopg2
-import pandas as pd
-from sklearn.metrics.pairwise import cosine_similarity
+# from sklearn.metrics.pairwise import cosine_similarity
 from flask import Flask, request, jsonify
 from fastai.tabular.all import *
 from fastai.collab import *
@@ -10,32 +8,6 @@ from fastai.collab import *
 app = Flask(__name__)
 
 # ----------------------------------------------------------- #
-def get_recommendations(user_id, user_similarity_df, user_item_matrix, top_n=10):
-    # Get similarity scores for the target user with all other users
-    sim_scores = user_similarity_df[user_id]
-
-    # Exclude the target user's own similarity score
-    sim_scores = sim_scores.drop(user_id)
-
-    # Multiply the similarity scores by the user-item ratings matrix (excluding the target user's row)
-    sim_scores_matrix = user_item_matrix.drop(user_id).mul(sim_scores, axis=0)
-
-    # Sum the weighted ratings for each whiskey
-    weighted_sum_ratings = sim_scores_matrix.sum(axis=0)
-
-    # Get the count of non-zero ratings (to handle division by zero)
-    non_zero_ratings = (sim_scores_matrix != 0).sum(axis=0)
-
-    # Calculate the average weighted rating for each whiskey
-    avg_weighted_ratings = weighted_sum_ratings / non_zero_ratings
-
-    # Filter out whiskeys the user has already rated
-    rated_whiskeys = user_item_matrix.loc[user_id].nonzero()[0]
-    recommendations = avg_weighted_ratings.drop(index=rated_whiskeys).nlargest(top_n)
-
-    return recommendations
-
-
 def get_data_from_database():
     connection = None
     try:
@@ -67,11 +39,20 @@ def get_data_from_database():
         cursor.execute(query)
         rows = cursor.fetchall()
 
-        # Convert to DataFrame
-        df = pd.DataFrame(rows, columns=['user', 'whiskey', 'rating'])
-        print(df.head())  # Just printing the first few rows
-        print("Ratings retrieved, Dataframe created.")
-        return df
+        ratings = pd.DataFrame(rows, columns=['user', 'whiskey', 'rating'])
+
+        ratings['user'] = ratings['user'].astype(int)
+        ratings['whiskey'] = ratings['whiskey'].astype(int)
+        ratings['rating'] = ratings['rating'].astype(float)
+
+        # Create DataLoaders from the DataFrame
+        dls = CollabDataLoaders.from_df(ratings, bs=64, user_name='user', item_name='whiskey', rating_name='rating')
+
+        print("Ratings retrieved, DataLoader created.")
+        learn = collab_learner(dls, n_factors=50, y_range=(0, 1))
+        learn.fit_one_cycle(5, 5e-3, wd=0.1)
+        print("Learned Model")
+        return learn, dls, ratings
 
     except psycopg2.OperationalError as e:
         print(f"Error connecting to the database: {e}")
@@ -90,8 +71,6 @@ def get_data_from_database():
 
 
 
-#Separation, scikit vs fastai
-
 def getMockData (): #Uses mock data from the Movielens 100k dataset
     ratings = pd.read_csv('assets/ml-100k/u.data', delimiter='\t', header=None, usecols=(0,1,2), names=['user','whiskey','rating'])
 
@@ -100,22 +79,42 @@ def getMockData (): #Uses mock data from the Movielens 100k dataset
     learn = collab_learner(dls, n_factors=50, y_range=(0, 5.5))
     learn.fit_one_cycle(5, 5e-3, wd=0.1)
     print("Learned Model")
+    return learn, dls, ratings
 
+
+def get_recommendations2(user_id, dls, learn, df):
+    items_already_rated = df[df['user'] == user_id]['whiskey'].unique()
+    all_items = df['whiskey'].unique()
+    items_to_predict = [item for item in all_items if item not in items_already_rated]
+
+    # Create a DataFrame for predictions
+    predict_df = pd.DataFrame({'user': [user_id] * len(items_to_predict), 'whiskey': items_to_predict})
+
+    # Get predictions
+    test_dl = dls.test_dl(predict_df)
+    predictions = learn.get_preds(dl=test_dl)[0]
+
+    # Combine predictions with item IDs
+    recommendations = pd.DataFrame({'whiskey': items_to_predict, 'Prediction': predictions.numpy().flatten()})
+
+    # Sort by predictions to get the top recommended items
+    recommendations = recommendations.sort_values(by='Prediction', ascending=False)
+    return recommendations.head(10)
 
 # ----------------------------------------------------------- #
 
-df = get_data_from_database()
-if df is None:
-    print("Data retrieval failed.")
-else:
-    print("Starting machine learning sequence")
-    # Convert the ratings DataFrame into a user-item matrix
-    user_item_matrix = df.pivot(index='user', columns='whiskey', values='rating').fillna(0)
-    user_similarity = cosine_similarity(user_item_matrix)
-    user_similarity_df = pd.DataFrame(user_similarity, index=user_item_matrix.index, columns=user_item_matrix.index)
-    print("sequence complete... entering server mode")
+routine = 1
 
-getMockData()
+if (routine == 0):
+    print("Starting Routine 0, getting data from database")
+    learn1, dls1, df1 = get_data_from_database()
+else:
+    print("Starting Routine 1, getting data from mock data")
+    learn1, dls1, df1 = getMockData()
+
+
+
+print (get_recommendations2(user_id=1, dls=dls1, learn=learn1, df=df1))
 
 @app.route('/process', methods=['POST'])
 def process_request():
@@ -133,18 +132,17 @@ def process_request():
     number = data['number']
 
     # Example processing based on the received number
-    if number == 1:
-        response_data = {"message": "You sent one!"}
-    elif number == 2:
-        response_data = {"message": "Number two, coming right up!"}
-    else:
-        response_data = {"message": f"Received {number}, but I'm not sure what to do with it."}
+
+    recommendations = get_recommendations2(number, dls1, learn1, df1)
+    whiskey_ids = recommendations['whiskey'].tolist()
+    response_data = {"list": whiskey_ids}
 
     return jsonify(response_data)
 
 
 if __name__ == "__main__":
-    if df is None:
-        app.run(debug=False)
-    else:
+    if dls1 is None:
         print("Data retrival failed, exiting application")
+    else:
+        print("Data retrival completed, starting application")
+        app.run(debug=False)
