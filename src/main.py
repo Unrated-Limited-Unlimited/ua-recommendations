@@ -139,6 +139,10 @@ def process_request():
 
     return jsonify(response_data)
 
+@app.route('/version', methods=['GET'])
+def get_version():
+    return jsonify("Version 1.1")
+
 
 if __name__ == "__main__":
     if dls1 is None:
