@@ -1,8 +1,10 @@
 import psycopg2
+import pandas as pd
 # from sklearn.metrics.pairwise import cosine_similarity
 from flask import Flask, request, jsonify
 from fastai.tabular.all import *
 from fastai.collab import *
+
 
 
 app = Flask(__name__)
@@ -74,6 +76,9 @@ def get_data_from_database():
 def getMockData (): #Uses mock data from the Movielens 100k dataset
     ratings = pd.read_csv('assets/ml-100k/u.data', delimiter='\t', header=None, usecols=(0,1,2), names=['user','whiskey','rating'])
 
+    ratings = ratings[ratings['whiskey'] >= 100]
+    ratings = ratings[ratings['whiskey'] <= 1286]
+
     dls = CollabDataLoaders.from_df(ratings, bs=64)
     print("Mock Data Loaded")
     learn = collab_learner(dls, n_factors=50, y_range=(0, 5.5))
@@ -138,6 +143,10 @@ def process_request():
     response_data = {"list": whiskey_ids}
 
     return jsonify(response_data)
+
+@app.route('/version', methods=['GET'])
+def get_version():
+    return jsonify("Version 1.2")
 
 
 if __name__ == "__main__":
